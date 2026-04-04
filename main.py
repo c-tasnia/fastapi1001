@@ -3,9 +3,13 @@ from sqlalchemy import Column, Integer, String, Float, create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from pydantic import BaseModel, ConfigDict
 from typing import List
+import os
 
 # ---------------- Database Setup ----------------
+# Use in-memory SQLite for CI, local file otherwise
 DATABASE_URL = "sqlite:///./books.db"
+if os.environ.get("CI") == "true":
+    DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
@@ -44,8 +48,7 @@ class BookResponse(BaseModel):
     quantity: int
     price: float
 
-    # Pydantic v2
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2
 
 # ---------------- FastAPI App ----------------
 app = FastAPI(title="📚 Bookshop API")
@@ -83,23 +86,18 @@ def read_books(db: Session = Depends(get_db)):
 @app.get("/books/{bookid}", response_model=BookResponse)
 def read_book(bookid: int, db: Session = Depends(get_db)):
     db_book = db.query(Book).filter(Book.bookid == bookid).first()
-
     if not db_book:
         raise HTTPException(status_code=404, detail="Book not found")
-
     return db_book
 
 # Update Book
 @app.put("/books/{bookid}", response_model=BookResponse)
 def update_book(bookid: int, book: BookCreate, db: Session = Depends(get_db)):
     db_book = db.query(Book).filter(Book.bookid == bookid).first()
-
     if not db_book:
         raise HTTPException(status_code=404, detail="Book not found")
-
     for key, value in book.model_dump().items():
         setattr(db_book, key, value)
-
     db.commit()
     db.refresh(db_book)
     return db_book
@@ -108,10 +106,8 @@ def update_book(bookid: int, book: BookCreate, db: Session = Depends(get_db)):
 @app.delete("/books/{bookid}")
 def delete_book(bookid: int, db: Session = Depends(get_db)):
     db_book = db.query(Book).filter(Book.bookid == bookid).first()
-
     if not db_book:
         raise HTTPException(status_code=404, detail="Book not found")
-
     db.delete(db_book)
     db.commit()
     return {"message": "Book deleted successfully"}
